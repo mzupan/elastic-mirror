@@ -6,7 +6,7 @@ plugins {
 group = 'com.elasticsearch.replication'
 version = '1.0.0'
 
-def esVersion = '7.17.25'
+def esVersion = '7.17.28'
 
 sourceCompatibility = JavaVersion.VERSION_11
 targetCompatibility = JavaVersion.VERSION_11

@@ -28,9 +28,15 @@ ES Cluster A (Active)  -->  S3 + SQS  -->  ES Cluster B (Passive)
 
 **Consumer side:** A background poller reads SQS messages and dispatches them to a worker pool. Each worker downloads the batch from S3, parses the events, and replays them through the Bulk API using external versioning. Checkpoints are tracked per-shard in a `.replication_checkpoint` index.
 
+## Compatibility
+
+Tested against the full Elasticsearch 7.17.x release line (7.17.0 through 7.17.28). The plugin compiles and runs correctly on every 7.17.x patch version. Runtime load tests with multi-index mixed workloads (creates, updates, deletes) have confirmed perfect cluster sync on 7.17.0, 7.17.25, and 7.17.28.
+
+Elasticsearch 8.x is not supported. The 7.x to 8.x upgrade introduced breaking changes to the plugin API that require a significant rewrite.
+
 ## Requirements
 
-- Elasticsearch 7.17.x
+- Elasticsearch 7.17.x (any patch version)
 - Java 11
 - AWS S3 bucket (or MinIO)
 - AWS SQS queue (or ElasticMQ)
@@ -55,7 +61,7 @@ bin/elasticsearch-plugin install file:///path/to/elastic-mirror-1.0.0.zip
 
 ### Docker
 
-A multi-stage Dockerfile is included that builds the plugin and installs it into the official Elasticsearch 7.17.25 image:
+A multi-stage Dockerfile is included that builds the plugin and installs it into the official Elasticsearch image:
 
 ```bash
 docker build -t es-replication:latest .
