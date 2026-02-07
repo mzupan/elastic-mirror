@@ -1,0 +1,75 @@
+plugins {
+    id 'java'
+    id 'idea'
+}
+
+group = 'com.elasticsearch.replication'
+version = '1.0.0'
+
+def esVersion = '7.17.25'
+
+sourceCompatibility = JavaVersion.VERSION_11
+targetCompatibility = JavaVersion.VERSION_11
+
+repositories {
+    mavenCentral()
+}
+
+configurations {
+    compileOnly.extendsFrom(annotationProcessor)
+    pluginBundle
+}
+
+dependencies {
+    // Elasticsearch core — compile-only since ES provides at runtime
+    compileOnly "org.elasticsearch:elasticsearch:${esVersion}"
+    implementation "org.elasticsearch.client:elasticsearch-rest-client:${esVersion}"
+    compileOnly "org.elasticsearch:elasticsearch-x-content:${esVersion}"
+
+    // AWS SDK v2 for S3 and SQS — bundled with the plugin
+    implementation platform('software.amazon.awssdk:bom:2.25.16')
+    implementation 'software.amazon.awssdk:s3'
+    implementation 'software.amazon.awssdk:sqs'
+    implementation 'software.amazon.awssdk:auth'
+    implementation 'software.amazon.awssdk:regions'
+
+    // Logging
+    compileOnly 'org.apache.logging.log4j:log4j-api:2.17.1'
+
+    // Testing
+    testImplementation "org.elasticsearch.test:framework:${esVersion}"
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.mockito:mockito-core:4.11.0'
+}
+
+// Build a fat jar with AWS SDK dependencies bundled
+task pluginZip(type: Zip) {
+    dependsOn jar
+    from jar.outputs.files
+    from configurations.runtimeClasspath
+    from('src/main/resources') {
+        include 'plugin-descriptor.properties'
+    }
+    from('.') {
+        include 'plugin-security.policy'
+    }
+    archiveFileName = "elastic-mirror-${version}.zip"
+    destinationDirectory = file("${buildDir}/distributions")
+}
+
+jar {
+    manifest {
+        attributes(
+            'Implementation-Title': project.name,
+            'Implementation-Version': project.version,
+            'Elasticsearch-Version': esVersion
+        )
+    }
+}
+
+tasks.named('test') {
+    useJUnit()
+    systemProperty 'tests.security.manager', 'false'
+}
+
+build.dependsOn pluginZip

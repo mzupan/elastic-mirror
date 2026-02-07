@@ -1,0 +1,126 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: es-active-config
+  namespace: es-replication
+data:
+  elasticsearch.yml: |
+    cluster.name: es-active
+    node.name: es-active-0
+    network.host: 0.0.0.0
+    discovery.type: single-node
+
+    # Replication plugin config — producer role
+    replication.role: producer
+    replication.transport.s3.bucket: es-replication
+    replication.transport.s3.region: us-east-1
+    replication.transport.s3.endpoint: http://minio:9000
+    replication.transport.s3.path_style_access: true
+    replication.transport.s3.base_path: replication/
+    replication.transport.sqs.queue_url: https://sqs.us-west-2.amazonaws.com/637423241855/es-replication
+    replication.transport.sqs.region: us-west-2
+    replication.transport.aws.access_key: minioadmin
+    replication.transport.aws.secret_key: minioadmin
+    replication.transport.compress: true
+
+    # Batching
+    replication.batch.size: 500
+    replication.batch.age_ms: 3000
+    replication.batch.max_bytes: 2097152
+
+    # Index filtering — replicate everything except system indices
+    replication.indices.include: ""
+    replication.indices.exclude: ""
+
+    # Disable X-Pack security for dev
+    xpack.security.enabled: false
+    xpack.ml.enabled: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: es-active
+  namespace: es-replication
+spec:
+  ports:
+    - port: 9200
+      name: http
+    - port: 9300
+      name: transport
+  selector:
+    app: es-active
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: es-active
+  namespace: es-replication
+spec:
+  serviceName: es-active
+  replicas: 1
+  selector:
+    matchLabels:
+      app: es-active
+  template:
+    metadata:
+      labels:
+        app: es-active
+    spec:
+      containers:
+        - name: elasticsearch
+          image: es-replication-plugin:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 9200
+            - containerPort: 9300
+          env:
+            - name: ES_JAVA_OPTS
+              value: "-Xms512m -Xmx512m -Des.security.manager.enabled=false"
+            # Real AWS creds for SQS (from SSO); S3 uses minioadmin from config
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: aws-creds
+                  key: access_key_id
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: aws-creds
+                  key: secret_access_key
+            - name: AWS_SESSION_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: aws-creds
+                  key: session_token
+          volumeMounts:
+            - name: config
+              mountPath: /usr/share/elasticsearch/config/elasticsearch.yml
+              subPath: elasticsearch.yml
+            - name: data
+              mountPath: /usr/share/elasticsearch/data
+          resources:
+            requests:
+              memory: "1Gi"
+              cpu: "500m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"
+          readinessProbe:
+            httpGet:
+              path: /_cluster/health
+              port: 9200
+            initialDelaySeconds: 30
+            periodSeconds: 10
+      volumes:
+        - name: config
+          configMap:
+            name: es-active-config
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 2Gi
