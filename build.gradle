@@ -4,7 +4,7 @@ plugins {
 }
 
 group = 'com.elasticsearch.replication'
-version = '1.0.0'
+version = findProperty('pluginVersion') ?: '1.0.0-dev'
 
 def esVersion = '8.14.3'
 

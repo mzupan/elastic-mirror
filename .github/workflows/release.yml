@@ -33,7 +33,7 @@ jobs:
           java-version: 17
 
       - name: Build plugin
-        run: ./gradlew pluginZip --no-daemon
+        run: ./gradlew pluginZip --no-daemon -PpluginVersion=${{ steps.version.outputs.version }}
 
       - name: Create release
         uses: softprops/action-gh-release@v2

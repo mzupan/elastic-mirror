@@ -64,10 +64,7 @@ update_version() {
   # Dockerfile base image
   sed -i '' "s|elasticsearch:7\.17\.[0-9]*|elasticsearch:${ver}|g; s|elasticsearch:8\.[0-9]*\.[0-9]*|elasticsearch:${ver}|g" "${PROJECT_DIR}/Dockerfile"
 
-  # Dockerfile COPY line for zip (non-greedy: [^ ]* to avoid eating /tmp/plugin.zip)
-  local plugin_version
-  plugin_version=$(grep "^version = " "${PROJECT_DIR}/build.gradle" | sed "s/version = '//;s/'//")
-  sed -i '' "s|elastic-mirror-[^ ]*\.zip|elastic-mirror-${plugin_version}.zip|g" "${PROJECT_DIR}/Dockerfile"
+  # Dockerfile COPY uses wildcard (elastic-mirror-*.zip) so no version update needed
 }
 
 build_image() {
