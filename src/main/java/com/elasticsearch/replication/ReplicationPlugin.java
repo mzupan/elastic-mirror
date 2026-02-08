@@ -18,8 +18,11 @@ import com.elasticsearch.replication.transport.TransportConfig;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.client.RestClient;
+import org.elasticsearch.cluster.ClusterChangedEvent;
+import org.elasticsearch.cluster.ClusterStateListener;
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
+import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
 import org.elasticsearch.common.settings.ClusterSettings;
 import org.elasticsearch.common.settings.IndexScopedSettings;
@@ -92,6 +95,34 @@ public class ReplicationPlugin extends Plugin implements ActionPlugin {
     @Override
     public List<Setting<?>> getSettings() {
         return ReplicationSettings.getSettings();
+    }
+
+    @Override
+    public Collection<?> createComponents(PluginServices services) {
+        boolean autostart = ReplicationSettings.AUTOSTART.get(settings);
+        if (autostart && ("producer".equals(role) || "consumer".equals(role))) {
+            logger.info("Autostart enabled — will start replication as {} when cluster is ready", role);
+            ClusterService clusterService = services.clusterService();
+            clusterService.addListener(new ClusterStateListener() {
+                @Override
+                public void clusterChanged(ClusterChangedEvent event) {
+                    // Wait for master to be elected (node has joined cluster)
+                    if (event.state().nodes().getMasterNodeId() != null) {
+                        clusterService.removeListener(this);
+                        services.threadPool().generic().execute(() -> {
+                            try {
+                                startReplication();
+                                logger.info("Autostart: replication started successfully as {}", role);
+                            } catch (Exception e) {
+                                logger.error("Autostart: failed to start replication", e);
+                            }
+                        });
+                    }
+                }
+            });
+        }
+
+        return Collections.emptyList();
     }
 
     @Override

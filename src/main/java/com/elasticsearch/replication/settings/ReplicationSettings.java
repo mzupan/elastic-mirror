@@ -18,6 +18,10 @@ public class ReplicationSettings {
     public static final Setting<String> ROLE = Setting.simpleString(
         PREFIX + "role", "disabled", Setting.Property.NodeScope, Setting.Property.Dynamic);
 
+    // Auto-start replication when the node joins the cluster
+    public static final Setting<Boolean> AUTOSTART = Setting.boolSetting(
+        PREFIX + "autostart", false, Setting.Property.NodeScope);
+
     // CDC settings (producer side)
     public static final Setting<Integer> BATCH_SIZE = Setting.intSetting(
         PREFIX + "batch.size", 1000, 1, 100000,
@@ -68,7 +72,7 @@ public class ReplicationSettings {
     public static List<Setting<?>> getSettings() {
         List<Setting<?>> settings = new ArrayList<>();
         settings.addAll(Arrays.asList(
-            ROLE, BATCH_SIZE, BATCH_AGE_MS, BATCH_BYTES,
+            ROLE, AUTOSTART, BATCH_SIZE, BATCH_AGE_MS, BATCH_BYTES,
             INCLUDE_INDICES, EXCLUDE_INDICES,
             XPACK_USERNAME, XPACK_PASSWORD, XPACK_SSL,
             REPLAY_BULK_SIZE, REPLAY_POLL_BATCH, REPLAY_POLL_WAIT_SEC,
