@@ -4,6 +4,7 @@ import com.elasticsearch.replication.api.ReplicationStatusAction;
 import com.elasticsearch.replication.api.StartReplicationAction;
 import com.elasticsearch.replication.api.StopReplicationAction;
 import com.elasticsearch.replication.cdc.ChangeCapture;
+import com.elasticsearch.replication.cdc.DeleteRoutingCapture;
 import com.elasticsearch.replication.cdc.OperationBatcher;
 import com.elasticsearch.replication.replay.BulkReplayer;
 import com.elasticsearch.replication.replay.CheckpointManager;
@@ -25,7 +26,6 @@ import org.elasticsearch.common.settings.IndexScopedSettings;
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.settings.SettingsFilter;
-import org.elasticsearch.xcontent.NamedXContentRegistry;
 import org.elasticsearch.index.IndexModule;
 import org.elasticsearch.plugins.ActionPlugin;
 import org.elasticsearch.plugins.Plugin;
@@ -33,15 +33,22 @@ import org.elasticsearch.rest.RestController;
 import org.elasticsearch.rest.RestHandler;
 import org.apache.http.HttpHost;
 
+import org.elasticsearch.action.support.ActionFilter;
+
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
+
+import org.elasticsearch.features.NodeFeature;
 
 /**
  * Main entry point for the Elasticsearch replication plugin.
@@ -84,18 +91,28 @@ public class ReplicationPlugin extends Plugin implements ActionPlugin {
     }
 
     @Override
-    public List<RestHandler> getRestHandlers(Settings settings,
+    public Collection<RestHandler> getRestHandlers(Settings settings,
+                                              NamedWriteableRegistry namedWriteableRegistry,
                                               RestController restController,
                                               ClusterSettings clusterSettings,
                                               IndexScopedSettings indexScopedSettings,
                                               SettingsFilter settingsFilter,
                                               IndexNameExpressionResolver indexNameExpressionResolver,
-                                              Supplier<DiscoveryNodes> nodesInCluster) {
+                                              Supplier<DiscoveryNodes> nodesInCluster,
+                                              Predicate<NodeFeature> clusterSupportsFeature) {
         return Arrays.asList(
             new StartReplicationAction(this),
             new StopReplicationAction(this),
             new ReplicationStatusAction(this)
         );
+    }
+
+    @Override
+    public Collection<ActionFilter> getActionFilters() {
+        if ("producer".equals(role)) {
+            return Collections.singletonList(new DeleteRoutingCapture());
+        }
+        return Collections.emptyList();
     }
 
     /**

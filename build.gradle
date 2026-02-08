@@ -6,10 +6,10 @@ plugins {
 group = 'com.elasticsearch.replication'
 version = '1.0.0'
 
-def esVersion = '7.17.28'
+def esVersion = '8.19.11'
 
-sourceCompatibility = JavaVersion.VERSION_11
-targetCompatibility = JavaVersion.VERSION_11
+sourceCompatibility = JavaVersion.VERSION_17
+targetCompatibility = JavaVersion.VERSION_17
 
 repositories {
     mavenCentral()
@@ -49,6 +49,7 @@ task pluginZip(type: Zip) {
     from configurations.runtimeClasspath
     from('src/main/resources') {
         include 'plugin-descriptor.properties'
+        include 'entitlement-policy.yaml'
     }
     from('.') {
         include 'plugin-security.policy'

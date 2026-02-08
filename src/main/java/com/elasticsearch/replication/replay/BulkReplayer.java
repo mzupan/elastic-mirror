@@ -54,20 +54,24 @@ public class BulkReplayer {
             StringBuilder bulkBody = new StringBuilder(subBatch.size() * 512);
             for (ChangeEvent event : subBatch) {
                 if (event.getOpType() == ChangeEvent.OpType.INDEX) {
-                    bulkBody.append("{\"index\":{\"_index\":\"").append(event.getIndex())
-                            .append("\",\"_id\":\"").append(event.getId())
+                    bulkBody.append("{\"index\":{\"_index\":\"").append(escapeJson(event.getIndex()))
+                            .append("\",\"_id\":\"").append(escapeJson(event.getId()))
                             .append("\",\"version\":").append(event.getSeqNo() + 1)
                             .append(",\"version_type\":\"external\"");
                     if (event.getRouting() != null) {
-                        bulkBody.append(",\"routing\":\"").append(event.getRouting()).append("\"");
+                        bulkBody.append(",\"routing\":\"").append(escapeJson(event.getRouting())).append("\"");
                     }
                     bulkBody.append("}}\n");
                     bulkBody.append(event.getSource()).append("\n");
                 } else if (event.getOpType() == ChangeEvent.OpType.DELETE) {
-                    bulkBody.append("{\"delete\":{\"_index\":\"").append(event.getIndex())
-                            .append("\",\"_id\":\"").append(event.getId())
+                    bulkBody.append("{\"delete\":{\"_index\":\"").append(escapeJson(event.getIndex()))
+                            .append("\",\"_id\":\"").append(escapeJson(event.getId()))
                             .append("\",\"version\":").append(event.getSeqNo() + 1)
-                            .append(",\"version_type\":\"external\"}}\n");
+                            .append(",\"version_type\":\"external\"");
+                    if (event.getRouting() != null) {
+                        bulkBody.append(",\"routing\":\"").append(escapeJson(event.getRouting())).append("\"");
+                    }
+                    bulkBody.append("}}\n");
                 }
 
                 if (event.getSeqNo() > maxSeqNo) {
@@ -151,18 +155,33 @@ public class BulkReplayer {
 
     /**
      * Parse NDJSON content back into ChangeEvents for replay.
+     * Throws on any parse failure so the caller can leave the SQS message
+     * visible for retry rather than silently losing records.
      */
     public static List<ChangeEvent> parseNdJson(String ndjsonContent) {
         List<ChangeEvent> events = new ArrayList<>();
         String[] lines = ndjsonContent.split("\n");
+        int parseErrors = 0;
+        String firstError = null;
 
         for (String line : lines) {
             if (line.trim().isEmpty()) continue;
             try {
                 events.add(parseEventLine(line));
             } catch (Exception e) {
-                logger.warn("Failed to parse NDJSON line: {}", e.getMessage());
+                parseErrors++;
+                if (firstError == null) {
+                    firstError = e.getMessage();
+                }
+                logger.error("Failed to parse NDJSON line (error {}): {} | line: {}",
+                             parseErrors, e.getMessage(),
+                             line.length() > 200 ? line.substring(0, 200) + "..." : line);
             }
+        }
+        if (parseErrors > 0) {
+            throw new IllegalStateException(
+                "Failed to parse " + parseErrors + " of " + (events.size() + parseErrors) +
+                " NDJSON lines. First error: " + firstError);
         }
         return events;
     }
@@ -208,9 +227,23 @@ public class BulkReplayer {
         int start = json.indexOf(key);
         if (start == -1) return null;
         start += key.length();
-        int end = json.indexOf("\"", start);
-        if (end == -1) return null;
-        return unescapeJson(json.substring(start, end));
+        // Scan for the closing quote, skipping escaped quotes
+        boolean escaped = false;
+        for (int i = start; i < json.length(); i++) {
+            char c = json.charAt(i);
+            if (escaped) {
+                escaped = false;
+                continue;
+            }
+            if (c == '\\') {
+                escaped = true;
+                continue;
+            }
+            if (c == '"') {
+                return unescapeJson(json.substring(start, i));
+            }
+        }
+        return null;
     }
 
     private static long extractLongField(String json, String field) {
@@ -251,6 +284,15 @@ public class BulkReplayer {
             }
         }
         return null;
+    }
+
+    private static String escapeJson(String value) {
+        if (value == null) return "";
+        return value.replace("\\", "\\\\")
+                     .replace("\"", "\\\"")
+                     .replace("\n", "\\n")
+                     .replace("\r", "\\r")
+                     .replace("\t", "\\t");
     }
 
     private static String unescapeJson(String value) {

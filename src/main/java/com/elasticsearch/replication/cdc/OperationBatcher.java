@@ -142,12 +142,34 @@ public class OperationBatcher {
         this.queueBytes.addAndGet(-batchBytes);
 
         if (!batch.isEmpty()) {
-            try {
-                logger.debug("Flushing batch: {} events, ~{} bytes", batch.size(), batchBytes);
-                batchConsumer.accept(batch);
-            } catch (Exception e) {
-                logger.error("Failed to process batch of {} events, events will be lost", batch.size(), e);
-                // TODO: Phase 5 — implement local disk spill for retry
+            int maxAttempts = 3;
+            boolean shipped = false;
+            for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+                try {
+                    logger.debug("Flushing batch: {} events, ~{} bytes", batch.size(), batchBytes);
+                    batchConsumer.accept(batch);
+                    shipped = true;
+                    break; // success
+                } catch (Exception e) {
+                    if (attempt < maxAttempts) {
+                        long backoffMs = 500L * (1L << (attempt - 1));
+                        logger.warn("Batch flush attempt {}/{} failed, retrying in {}ms: {}",
+                                    attempt, maxAttempts, backoffMs, e.getMessage());
+                        try {
+                            Thread.sleep(backoffMs);
+                        } catch (InterruptedException ie) {
+                            Thread.currentThread().interrupt();
+                            logger.error("Interrupted during batch retry, re-queuing {} events", batch.size());
+                            break;
+                        }
+                    } else {
+                        logger.error("Batch of {} events failed after {} attempts, re-queuing for retry",
+                                     batch.size(), maxAttempts, e);
+                    }
+                }
+            }
+            if (!shipped) {
+                requeue(batch);
             }
         }
 
@@ -155,6 +177,32 @@ public class OperationBatcher {
         if (queueSize.get() >= maxBatchSize) {
             scheduler.submit(this::flush);
         }
+    }
+
+    /**
+     * Re-queue events that failed to ship. Idempotent replay via external
+     * versioning means duplicates (from groups that succeeded before the
+     * batch-level failure) are harmless — they produce version-conflict
+     * no-ops on the passive side.
+     *
+     * A capacity cap prevents OOM during extended transport outages.
+     */
+    private void requeue(List<ChangeEvent> events) {
+        int maxCapacity = maxBatchSize * 10;
+        int currentSize = queueSize.get();
+        if (currentSize + events.size() > maxCapacity) {
+            logger.error("Queue at capacity ({}/{} events), {} events will be lost",
+                         currentSize, maxCapacity, events.size());
+            return;
+        }
+        long bytes = 0;
+        for (ChangeEvent event : events) {
+            queue.add(event);
+            bytes += event.estimatedSizeBytes();
+        }
+        queueSize.addAndGet(events.size());
+        queueBytes.addAndGet(bytes);
+        logger.warn("Re-queued {} events for retry (queue size: {})", events.size(), queueSize.get());
     }
 
     public int getQueueSize() {

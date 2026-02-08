@@ -1,0 +1,9 @@
+ALL-UNNAMED:
+  - write_system_properties:
+      properties:
+        - aws.sharedCredentialsFile
+        - aws.configFile
+        - aws.accessKeyId
+        - aws.secretAccessKey
+        - aws.sessionToken
+        - aws.region

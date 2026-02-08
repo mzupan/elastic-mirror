@@ -243,8 +243,23 @@ public class ReplayService {
         int start = json.indexOf(key);
         if (start == -1) return null;
         start += key.length();
-        int end = json.indexOf("\"", start);
-        return json.substring(start, end);
+        // Scan for closing quote, skipping escaped quotes
+        boolean escaped = false;
+        for (int i = start; i < json.length(); i++) {
+            char c = json.charAt(i);
+            if (escaped) {
+                escaped = false;
+                continue;
+            }
+            if (c == '\\') {
+                escaped = true;
+                continue;
+            }
+            if (c == '"') {
+                return json.substring(start, i);
+            }
+        }
+        return null;
     }
 
     private static String extractNumericField(String json, String field) {

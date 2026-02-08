@@ -26,11 +26,11 @@ jobs:
           fi
           echo "version=${TAG}" >> "$GITHUB_OUTPUT"
 
-      - name: Set up Java 11
+      - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 11
+          java-version: 17
 
       - name: Build plugin
         run: ./gradlew pluginZip --no-daemon

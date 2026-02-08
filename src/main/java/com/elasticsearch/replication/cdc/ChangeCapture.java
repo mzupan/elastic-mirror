@@ -94,6 +94,10 @@ public class ChangeCapture implements IndexingOperationListener {
         }
 
         try {
+            // Engine.Delete doesn't expose routing in ES 7.x.
+            // Retrieve routing captured by the ActionFilter if available.
+            String routing = DeleteRoutingCapture.getAndRemoveRouting(indexName, operation.id());
+
             ChangeEvent event = new ChangeEvent(
                 indexName,
                 operation.id(),
@@ -101,7 +105,7 @@ public class ChangeCapture implements IndexingOperationListener {
                 result.getSeqNo(),
                 result.getTerm(),
                 ChangeEvent.OpType.DELETE,
-                null,  // no routing for deletes in this context
+                routing,
                 shardId.id(),
                 System.currentTimeMillis()
             );

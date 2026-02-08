@@ -1,10 +1,10 @@
 package com.elasticsearch.replication.api;
 
 import com.elasticsearch.replication.ReplicationPlugin;
-import org.elasticsearch.client.node.NodeClient;
+import org.elasticsearch.client.internal.node.NodeClient;
 import org.elasticsearch.rest.BaseRestHandler;
 import org.elasticsearch.rest.RestRequest;
-import org.elasticsearch.rest.BytesRestResponse;
+import org.elasticsearch.rest.RestResponse;
 import org.elasticsearch.rest.RestStatus;
 import org.elasticsearch.xcontent.XContentBuilder;
 import org.elasticsearch.xcontent.XContentFactory;
@@ -43,14 +43,14 @@ public class StopReplicationAction extends BaseRestHandler {
                 builder.field("acknowledged", true);
                 builder.field("message", "Replication stopped");
                 builder.endObject();
-                channel.sendResponse(new BytesRestResponse(RestStatus.OK, builder));
+                channel.sendResponse(new RestResponse(RestStatus.OK, builder));
             } catch (Exception e) {
                 XContentBuilder builder = XContentFactory.jsonBuilder();
                 builder.startObject();
                 builder.field("acknowledged", false);
                 builder.field("error", e.getMessage());
                 builder.endObject();
-                channel.sendResponse(new BytesRestResponse(RestStatus.INTERNAL_SERVER_ERROR, builder));
+                channel.sendResponse(new RestResponse(RestStatus.INTERNAL_SERVER_ERROR, builder));
             }
         };
     }
