@@ -11,8 +11,15 @@ ACTIVE_URL="${ACTIVE_URL:-http://localhost:9200}"
 PASSIVE_URL="${PASSIVE_URL:-http://localhost:9201}"
 DURATION_SECONDS="${DURATION_SECONDS:-3600}"  # default 1 hour
 OPS_PER_SECOND="${OPS_PER_SECOND:-5}"
+ES_USER="${ES_USER:-}"  # e.g. "elastic:elastic" for xpack auth
 NUM_INDICES=10
 DOCS_PER_INDEX=100  # initial seed docs per index
+
+# Build curl auth flag
+CURL_AUTH=()
+if [ -n "$ES_USER" ]; then
+    CURL_AUTH=(-u "$ES_USER")
+fi
 
 # Index names
 INDICES=()
@@ -43,7 +50,7 @@ warn(){ echo -e "${YELLOW}[$(date '+%H:%M:%S')] !${NC} $*"; }
 check_cluster() {
     local url=$1 name=$2
     local status
-    status=$(curl -s -o /dev/null -w "%{http_code}" "$url/_cluster/health" 2>/dev/null || echo "000")
+    status=$(curl -s "${CURL_AUTH[@]}" -o /dev/null -w "%{http_code}" "$url/_cluster/health" 2>/dev/null || echo "000")
     if [ "$status" = "200" ]; then
         ok "$name cluster reachable at $url"
         return 0
@@ -59,7 +66,7 @@ create_indices() {
     log "Creating ${#INDICES[@]} indices on $name..."
     for idx in "${INDICES[@]}"; do
         local resp
-        resp=$(curl -s -X PUT "$url/$idx" -H 'Content-Type: application/json' -d '{
+        resp=$(curl -s "${CURL_AUTH[@]}" -X PUT "$url/$idx" -H 'Content-Type: application/json' -d '{
             "settings": { "number_of_shards": 1, "number_of_replicas": 0 },
             "mappings": {
                 "properties": {
@@ -94,7 +101,7 @@ seed_docs() {
             bulk_body+='{"message":"Initial seed document '"$doc_id"'","counter":0,"status":"active","tags":["seed","test"],"created_at":"'"$(date -u +%Y-%m-%dT%H:%M:%SZ)"'","updated_at":"'"$(date -u +%Y-%m-%dT%H:%M:%SZ)"'"}'$'\n'
         done
         local resp
-        resp=$(curl -s -X POST "$ACTIVE_URL/_bulk" -H 'Content-Type: application/x-ndjson' --data-binary "$bulk_body" 2>/dev/null)
+        resp=$(curl -s "${CURL_AUTH[@]}" -X POST "$ACTIVE_URL/_bulk" -H 'Content-Type: application/x-ndjson' --data-binary "$bulk_body" 2>/dev/null)
         local errs
         errs=$(echo "$resp" | grep -o '"errors":true' || true)
         if [ -n "$errs" ]; then
@@ -128,7 +135,7 @@ do_create() {
     local doc_id="doc-$((DOCS_PER_INDEX + RANDOM % 10000 + 1))"
     local word1=$(random_word) word2=$(random_word)
     local resp
-    resp=$(curl -s -X PUT "$ACTIVE_URL/$idx/_doc/$doc_id" -H 'Content-Type: application/json' -d '{
+    resp=$(curl -s "${CURL_AUTH[@]}" -X PUT "$ACTIVE_URL/$idx/_doc/$doc_id" -H 'Content-Type: application/json' -d '{
         "message": "'"$word1 $word2 generated document"'",
         "counter": 1,
         "status": "active",
@@ -149,7 +156,7 @@ do_update() {
     local word=$(random_word)
     local counter=$((RANDOM % 1000))
     local resp
-    resp=$(curl -s -X POST "$ACTIVE_URL/$idx/_update/$doc_id" -H 'Content-Type: application/json' -d '{
+    resp=$(curl -s "${CURL_AUTH[@]}" -X POST "$ACTIVE_URL/$idx/_update/$doc_id" -H 'Content-Type: application/json' -d '{
         "doc": {
             "message": "Updated: '"$word"' at '"$(date -u +%H:%M:%S)"'",
             "counter": '"$counter"',
@@ -169,7 +176,7 @@ do_delete() {
     local idx=$(random_index)
     local doc_id=$(random_doc_id)
     local resp
-    resp=$(curl -s -X DELETE "$ACTIVE_URL/$idx/_doc/$doc_id" 2>/dev/null)
+    resp=$(curl -s "${CURL_AUTH[@]}" -X DELETE "$ACTIVE_URL/$idx/_doc/$doc_id" 2>/dev/null)
     if echo "$resp" | grep -q '"result"'; then
         TOTAL_DELETES=$((TOTAL_DELETES + 1))
     else
@@ -233,8 +240,8 @@ compare_clusters() {
     sleep 30
 
     # Refresh both clusters
-    curl -s -X POST "$ACTIVE_URL/_refresh" >/dev/null 2>&1
-    curl -s -X POST "$PASSIVE_URL/_refresh" >/dev/null 2>&1
+    curl -s "${CURL_AUTH[@]}" -X POST "$ACTIVE_URL/_refresh" >/dev/null 2>&1
+    curl -s "${CURL_AUTH[@]}" -X POST "$PASSIVE_URL/_refresh" >/dev/null 2>&1
     sleep 2
 
     local all_match=true
@@ -246,8 +253,8 @@ compare_clusters() {
 
     for idx in "${INDICES[@]}"; do
         local active_count passive_count
-        active_count=$(curl -s "$ACTIVE_URL/$idx/_count" 2>/dev/null | grep -o '"count":[0-9]*' | grep -o '[0-9]*' || echo "0")
-        passive_count=$(curl -s "$PASSIVE_URL/$idx/_count" 2>/dev/null | grep -o '"count":[0-9]*' | grep -o '[0-9]*' || echo "0")
+        active_count=$(curl -s "${CURL_AUTH[@]}" "$ACTIVE_URL/$idx/_count" 2>/dev/null | grep -o '"count":[0-9]*' | grep -o '[0-9]*' || echo "0")
+        passive_count=$(curl -s "${CURL_AUTH[@]}" "$PASSIVE_URL/$idx/_count" 2>/dev/null | grep -o '"count":[0-9]*' | grep -o '[0-9]*' || echo "0")
 
         total_active=$((total_active + active_count))
         total_passive=$((total_passive + passive_count))
@@ -278,8 +285,8 @@ compare_clusters() {
         local idx=$(random_index)
         local doc_id=$(random_doc_id)
         local active_doc passive_doc
-        active_doc=$(curl -s "$ACTIVE_URL/$idx/_doc/$doc_id" 2>/dev/null)
-        passive_doc=$(curl -s "$PASSIVE_URL/$idx/_doc/$doc_id" 2>/dev/null)
+        active_doc=$(curl -s "${CURL_AUTH[@]}" "$ACTIVE_URL/$idx/_doc/$doc_id" 2>/dev/null)
+        passive_doc=$(curl -s "${CURL_AUTH[@]}" "$PASSIVE_URL/$idx/_doc/$doc_id" 2>/dev/null)
 
         local active_found=$(echo "$active_doc" | grep -o '"found":true' || echo "")
         local passive_found=$(echo "$passive_doc" | grep -o '"found":true' || echo "")
@@ -321,10 +328,10 @@ compare_clusters() {
     # Replication status from both clusters
     echo ""
     log "Active cluster replication status:"
-    curl -s "$ACTIVE_URL/_replication/status" 2>/dev/null | python3 -m json.tool 2>/dev/null || curl -s "$ACTIVE_URL/_replication/status"
+    curl -s "${CURL_AUTH[@]}" "$ACTIVE_URL/_replication/status" 2>/dev/null | python3 -m json.tool 2>/dev/null || curl -s "${CURL_AUTH[@]}" "$ACTIVE_URL/_replication/status"
     echo ""
     log "Passive cluster replication status:"
-    curl -s "$PASSIVE_URL/_replication/status" 2>/dev/null | python3 -m json.tool 2>/dev/null || curl -s "$PASSIVE_URL/_replication/status"
+    curl -s "${CURL_AUTH[@]}" "$PASSIVE_URL/_replication/status" 2>/dev/null | python3 -m json.tool 2>/dev/null || curl -s "${CURL_AUTH[@]}" "$PASSIVE_URL/_replication/status"
 }
 
 # ---- Main ----
@@ -338,6 +345,7 @@ main() {
     log "Duration: $((DURATION_SECONDS / 60)) minutes"
     log "Indices: $NUM_INDICES"
     log "Ops/sec: ~$OPS_PER_SECOND"
+    [ -n "$ES_USER" ] && log "Auth: $ES_USER"
     echo ""
 
     # Check connectivity

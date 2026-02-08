@@ -2,4 +2,5 @@ grant {
     permission java.net.SocketPermission "*", "connect,resolve";
     permission java.util.PropertyPermission "*", "read,write";
     permission java.io.FilePermission "/dev/null", "read";
+    permission java.io.FilePermission "/var/run/secrets/-", "read";
 };

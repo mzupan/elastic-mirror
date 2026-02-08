@@ -17,3 +17,5 @@ ALL-UNNAMED:
       - relative_path: .aws
         relative_to: home
         mode: read
+      - path: /var/run/secrets
+        mode: read
