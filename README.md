@@ -30,12 +30,17 @@ ES Cluster A (Active)  -->  S3 + SQS  -->  ES Cluster B (Passive)
 
 ## Compatibility
 
-Tested against Elasticsearch 8.13 and later. The plugin compiles and runs correctly on 8.13+.
+| Version Range | Status |
+|---|---|
+| 8.13 -- 8.17 | Supported and tested |
+| 8.18 -- 8.19 | Supported and tested (uses entitlement-policy.yaml for the ES entitlements framework) |
+| 9.x | Not tested |
+| < 8.13 | Not supported (incompatible ES plugin API) |
 
 ## Requirements
 
 - Elasticsearch 8.13+
-- Java 11
+- Java 17
 - AWS S3 bucket (or MinIO)
 - AWS SQS queue (or ElasticMQ)
 - AWS credentials with appropriate S3 and SQS permissions

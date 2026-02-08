@@ -11,7 +11,7 @@ COPY plugin-security.policy ./
 RUN gradle pluginZip --no-daemon
 
 # Stage 2: ES image with plugin installed
-FROM docker.elastic.co/elasticsearch/elasticsearch:8.19.11
+FROM docker.elastic.co/elasticsearch/elasticsearch:8.14.3
 
 # Copy the plugin zip from builder
 COPY --from=builder /build/build/distributions/elastic-mirror-1.0.0.zip /tmp/plugin.zip
