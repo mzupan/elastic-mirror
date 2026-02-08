@@ -143,18 +143,53 @@ replication.transport.sqs.endpoint: http://elasticmq.internal:9324
 
 ### AWS Credentials
 
-The plugin uses the AWS SDK default credential chain:
+The plugin uses the AWS SDK default credential chain when no explicit credentials are configured:
 
 1. Environment variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`)
 2. System properties
-3. IAM instance profile or ECS task role (recommended for AWS deployments)
+3. Web Identity Token (EKS Pod Identity, IRSA)
+4. ECS container credentials
+5. EC2 instance profile (IMDS)
 
-For explicit credentials, add to the Elasticsearch keystore:
+For explicit credentials, add to `elasticsearch.yml` or the Elasticsearch keystore:
 
 ```bash
 bin/elasticsearch-keystore add replication.transport.aws.access_key
 bin/elasticsearch-keystore add replication.transport.aws.secret_key
 ```
+
+### IAM Policy
+
+The minimum IAM policy required for the plugin:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReplicationS3",
+      "Effect": "Allow",
+      "Action": [
+        "s3:PutObject",
+        "s3:GetObject"
+      ],
+      "Resource": "arn:aws:s3:::YOUR_BUCKET/replication/*"
+    },
+    {
+      "Sid": "ReplicationSQS",
+      "Effect": "Allow",
+      "Action": [
+        "sqs:SendMessage",
+        "sqs:ReceiveMessage",
+        "sqs:DeleteMessage"
+      ],
+      "Resource": "arn:aws:sqs:REGION:ACCOUNT_ID:YOUR_QUEUE"
+    }
+  ]
+}
+```
+
+The producer needs `s3:PutObject` and `sqs:SendMessage`. The consumer needs `s3:GetObject`, `sqs:ReceiveMessage`, and `sqs:DeleteMessage`. You can split these into separate policies if the clusters use different IAM roles.
 
 ## Usage
 
