@@ -7,3 +7,12 @@ ALL-UNNAMED:
         - aws.secretAccessKey
         - aws.sessionToken
         - aws.region
+  - outbound_network
+  - files:
+      - path: /dev/null
+        mode: read
+      - path: /dev/urandom
+        mode: read
+      - relative_path: .aws
+        relative_to: home
+        mode: read
