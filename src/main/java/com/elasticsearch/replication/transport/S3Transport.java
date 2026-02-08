@@ -5,6 +5,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
+import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.regions.Region;
@@ -84,11 +85,12 @@ public class S3Transport {
 
     private static AwsCredentialsProvider resolveCredentials(TransportConfig config) {
         if (config.hasAwsCredentials()) {
+            logger.info("S3 using static credentials from config");
             return StaticCredentialsProvider.create(
                 AwsBasicCredentials.create(config.getAwsAccessKey(), config.getAwsSecretKey()));
         }
-        throw new IllegalArgumentException(
-            "AWS credentials must be configured via replication.transport.aws.access_key and aws.secret_key");
+        logger.info("S3 using default credential chain (supports Pod Identity, IRSA, instance profile, env vars)");
+        return DefaultCredentialsProvider.create();
     }
 
     // Constructor for testing with pre-built client

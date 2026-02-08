@@ -4,8 +4,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
-import software.amazon.awssdk.auth.credentials.AwsSessionCredentials;
-import software.amazon.awssdk.auth.credentials.EnvironmentVariableCredentialsProvider;
+import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.sqs.SqsClient;
@@ -27,10 +26,9 @@ import java.util.List;
 /**
  * SQS notifier using AWS SDK v2.
  *
- * Uses EnvironmentVariableCredentialsProvider for real AWS SQS (picks up
- * AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN from env).
- * Falls back to static credentials from config when a custom SQS endpoint
- * is configured (for ElasticMQ/LocalStack).
+ * Uses static credentials from config when a custom SQS endpoint is configured
+ * (for ElasticMQ/LocalStack). Otherwise uses the default credential chain which
+ * supports Pod Identity, IRSA, ECS task role, instance profile, and env vars.
  */
 public class SQSNotifier {
 
@@ -47,13 +45,20 @@ public class SQSNotifier {
             S3Transport.disableAwsProfileFileLoading();
 
             AwsCredentialsProvider credentialsProvider;
-            if (config.hasCustomSqsEndpoint()) {
+            if (config.hasCustomSqsEndpoint() && config.hasAwsCredentials()) {
                 // Local dev with ElasticMQ — use static creds from config
                 credentialsProvider = StaticCredentialsProvider.create(
                     AwsBasicCredentials.create(config.getAwsAccessKey(), config.getAwsSecretKey()));
+                logger.info("SQS using static credentials (custom endpoint)");
+            } else if (config.hasAwsCredentials()) {
+                // Explicit creds in config
+                credentialsProvider = StaticCredentialsProvider.create(
+                    AwsBasicCredentials.create(config.getAwsAccessKey(), config.getAwsSecretKey()));
+                logger.info("SQS using static credentials from config");
             } else {
-                // Real AWS SQS — use env vars (supports SSO session tokens)
-                credentialsProvider = EnvironmentVariableCredentialsProvider.create();
+                // Default chain: Pod Identity, IRSA, ECS task role, instance profile, env vars
+                credentialsProvider = DefaultCredentialsProvider.create();
+                logger.info("SQS using default credential chain (supports Pod Identity, IRSA, instance profile, env vars)");
             }
 
             SqsClientBuilder builder = SqsClient.builder()
