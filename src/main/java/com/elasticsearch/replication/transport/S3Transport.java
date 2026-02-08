@@ -97,11 +97,11 @@ public class S3Transport {
                 AwsBasicCredentials.create(config.getAwsAccessKey(), config.getAwsSecretKey()));
         }
 
-        // Check for IRSA/Pod Identity — env vars are copied to system properties
-        // by ReplicationPlugin during init (before SecurityManager blocks getenv)
-        String roleArn = System.getProperty("aws.roleArn");
-        String tokenFile = System.getProperty("aws.webIdentityTokenFile");
-        if (roleArn != null && !roleArn.isEmpty() && tokenFile != null && !tokenFile.isEmpty()) {
+        // Check for IRSA/Pod Identity via elasticsearch.yml settings
+        // (ES SecurityManager blocks System.getenv(), so env vars don't work)
+        if (config.hasIrsaConfig()) {
+            String roleArn = config.getAwsRoleArn();
+            String tokenFile = config.getAwsWebIdentityTokenFile();
             logger.info("Using IRSA credentials: role={}, tokenFile={}", roleArn, tokenFile);
             Path tokenPath = Paths.get(tokenFile);
             StsClient stsClient = StsClient.builder()

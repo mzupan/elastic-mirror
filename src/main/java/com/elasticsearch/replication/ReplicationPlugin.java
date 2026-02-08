@@ -67,27 +67,6 @@ public class ReplicationPlugin extends Plugin implements ActionPlugin {
 
     private static final Logger logger = LogManager.getLogger(ReplicationPlugin.class);
 
-    // Copy IRSA env vars to system properties during class loading.
-    // ES SecurityManager blocks System.getenv() for plugins, but allows
-    // System.getProperty(). The AWS SDK's WebIdentityTokenFileCredentialsProvider
-    // uses getenv() which silently fails, causing fallback to IMDS (node role).
-    // By copying to system properties, our manual IRSA provider can read them.
-    static {
-        copyEnvToProperty("AWS_ROLE_ARN", "aws.roleArn");
-        copyEnvToProperty("AWS_WEB_IDENTITY_TOKEN_FILE", "aws.webIdentityTokenFile");
-    }
-
-    private static void copyEnvToProperty(String envName, String propName) {
-        try {
-            String value = System.getenv(envName);
-            if (value != null && !value.isEmpty()) {
-                System.setProperty(propName, value);
-            }
-        } catch (SecurityException e) {
-            // SecurityManager may already be active — ignore
-        }
-    }
-
     private final Settings settings;
     private volatile String role;
 

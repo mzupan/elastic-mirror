@@ -47,6 +47,13 @@ public class TransportConfig {
     public static final Setting<String> AWS_SECRET_KEY = Setting.simpleString(
         PREFIX + "aws.secret_key", "", Setting.Property.NodeScope, Setting.Property.Filtered);
 
+    // IRSA / Web Identity settings (for EKS pod identity)
+    public static final Setting<String> AWS_ROLE_ARN = Setting.simpleString(
+        PREFIX + "aws.role_arn", "", Setting.Property.NodeScope, Setting.Property.Filtered);
+
+    public static final Setting<String> AWS_WEB_IDENTITY_TOKEN_FILE = Setting.simpleString(
+        PREFIX + "aws.web_identity_token_file", "", Setting.Property.NodeScope, Setting.Property.Filtered);
+
     // Compression
     public static final Setting<Boolean> COMPRESS = Setting.boolSetting(
         PREFIX + "compress", true, Setting.Property.NodeScope, Setting.Property.Dynamic);
@@ -56,6 +63,7 @@ public class TransportConfig {
             S3_BUCKET, S3_BASE_PATH, S3_REGION, S3_ENDPOINT, S3_PATH_STYLE,
             SQS_QUEUE_URL, SQS_REGION, SQS_ENDPOINT,
             AWS_ACCESS_KEY, AWS_SECRET_KEY,
+            AWS_ROLE_ARN, AWS_WEB_IDENTITY_TOKEN_FILE,
             COMPRESS
         );
     }
@@ -72,6 +80,8 @@ public class TransportConfig {
     private final boolean compress;
     private final String awsAccessKey;
     private final String awsSecretKey;
+    private final String awsRoleArn;
+    private final String awsWebIdentityTokenFile;
 
     public TransportConfig(Settings settings) {
         this.s3Bucket = S3_BUCKET.get(settings);
@@ -85,6 +95,8 @@ public class TransportConfig {
         this.compress = COMPRESS.get(settings);
         this.awsAccessKey = AWS_ACCESS_KEY.get(settings);
         this.awsSecretKey = AWS_SECRET_KEY.get(settings);
+        this.awsRoleArn = AWS_ROLE_ARN.get(settings);
+        this.awsWebIdentityTokenFile = AWS_WEB_IDENTITY_TOKEN_FILE.get(settings);
     }
 
     public String getS3Bucket() { return s3Bucket; }
@@ -99,9 +111,17 @@ public class TransportConfig {
     public String getAwsAccessKey() { return awsAccessKey; }
     public String getAwsSecretKey() { return awsSecretKey; }
 
+    public String getAwsRoleArn() { return awsRoleArn; }
+    public String getAwsWebIdentityTokenFile() { return awsWebIdentityTokenFile; }
+
     public boolean hasAwsCredentials() {
         return awsAccessKey != null && !awsAccessKey.isEmpty()
             && awsSecretKey != null && !awsSecretKey.isEmpty();
+    }
+
+    public boolean hasIrsaConfig() {
+        return awsRoleArn != null && !awsRoleArn.isEmpty()
+            && awsWebIdentityTokenFile != null && !awsWebIdentityTokenFile.isEmpty();
     }
 
     /**
