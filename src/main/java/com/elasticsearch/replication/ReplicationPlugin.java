@@ -31,13 +31,17 @@ import org.elasticsearch.plugins.ActionPlugin;
 import org.elasticsearch.plugins.Plugin;
 import org.elasticsearch.rest.RestController;
 import org.elasticsearch.rest.RestHandler;
+import org.apache.http.Header;
 import org.apache.http.HttpHost;
+import org.apache.http.message.BasicHeader;
 
 import org.elasticsearch.action.support.ActionFilter;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -206,7 +210,28 @@ public class ReplicationPlugin extends Plugin implements ActionPlugin {
         SQSNotifier sqsNotifier = new SQSNotifier(transportConfig);
 
         // Build low-level REST client pointing to localhost (this cluster)
-        replayClient = RestClient.builder(new HttpHost("localhost", 9200, "http")).build();
+        String scheme = ReplicationSettings.XPACK_SSL.get(settings) ? "https" : "http";
+        var builder = RestClient.builder(new HttpHost("localhost", 9200, scheme));
+
+        // Resolve xpack credentials: config first, then env vars
+        String username = ReplicationSettings.XPACK_USERNAME.get(settings);
+        String password = ReplicationSettings.XPACK_PASSWORD.get(settings);
+        if (username == null || username.isEmpty()) {
+            username = System.getenv("REPLICATION_XPACK_USERNAME");
+        }
+        if (password == null || password.isEmpty()) {
+            password = System.getenv("REPLICATION_XPACK_PASSWORD");
+        }
+        if (username != null && !username.isEmpty() && password != null && !password.isEmpty()) {
+            String encoded = Base64.getEncoder().encodeToString(
+                (username + ":" + password).getBytes(StandardCharsets.UTF_8));
+            builder.setDefaultHeaders(new Header[]{
+                new BasicHeader("Authorization", "Basic " + encoded)
+            });
+            logger.info("Consumer REST client configured with xpack basic auth (user: {})", username);
+        }
+
+        replayClient = builder.build();
 
         int bulkSize = ReplicationSettings.REPLAY_BULK_SIZE.get(settings);
         BulkReplayer bulkReplayer = new BulkReplayer(replayClient, bulkSize);

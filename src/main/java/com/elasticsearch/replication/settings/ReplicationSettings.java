@@ -38,6 +38,16 @@ public class ReplicationSettings {
     public static final Setting<String> EXCLUDE_INDICES = Setting.simpleString(
         PREFIX + "indices.exclude", "", Setting.Property.NodeScope, Setting.Property.Dynamic);
 
+    // xpack security settings (for internal REST client auth)
+    public static final Setting<String> XPACK_USERNAME = Setting.simpleString(
+        PREFIX + "xpack.username", "", Setting.Property.NodeScope, Setting.Property.Filtered);
+
+    public static final Setting<String> XPACK_PASSWORD = Setting.simpleString(
+        PREFIX + "xpack.password", "", Setting.Property.NodeScope, Setting.Property.Filtered);
+
+    public static final Setting<Boolean> XPACK_SSL = Setting.boolSetting(
+        PREFIX + "xpack.ssl", false, Setting.Property.NodeScope);
+
     // Replay settings (consumer side)
     public static final Setting<Integer> REPLAY_BULK_SIZE = Setting.intSetting(
         PREFIX + "replay.bulk_size", 500, 1, 10000,
@@ -60,6 +70,7 @@ public class ReplicationSettings {
         settings.addAll(Arrays.asList(
             ROLE, BATCH_SIZE, BATCH_AGE_MS, BATCH_BYTES,
             INCLUDE_INDICES, EXCLUDE_INDICES,
+            XPACK_USERNAME, XPACK_PASSWORD, XPACK_SSL,
             REPLAY_BULK_SIZE, REPLAY_POLL_BATCH, REPLAY_POLL_WAIT_SEC,
             REPLAY_WORKER_THREADS
         ));
