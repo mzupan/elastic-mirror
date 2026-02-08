@@ -13,6 +13,13 @@ import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3ClientBuilder;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.sts.StsClient;
+import software.amazon.awssdk.services.sts.auth.StsAssumeRoleWithWebIdentityCredentialsProvider;
+import software.amazon.awssdk.services.sts.model.AssumeRoleWithWebIdentityRequest;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -49,14 +56,14 @@ public class S3Transport {
         this.basePath = normalizeBasePath(config.getS3BasePath());
         this.compress = config.isCompress();
 
-        // Resolve credentials from ES settings (avoids System.getenv which is blocked by security manager)
-        AwsCredentialsProvider credentialsProvider = resolveCredentials(config);
-
         // Wrap in doPrivileged — required for ES plugin security manager
+        // Credential resolution must be inside the privileged block so IRSA
+        // can read env vars (AWS_WEB_IDENTITY_TOKEN_FILE, AWS_ROLE_ARN) and token files
         this.s3Client = AccessController.doPrivileged((PrivilegedAction<S3Client>) () -> {
             // Prevent AWS SDK from trying to read ~/.aws/credentials and ~/.aws/config
-            // We have PropertyPermission but not FilePermission for those paths
             disableAwsProfileFileLoading();
+
+            AwsCredentialsProvider credentialsProvider = resolveCredentials(config);
 
             S3ClientBuilder builder = S3Client.builder()
                 .region(Region.of(config.getS3Region()))
@@ -83,13 +90,42 @@ public class S3Transport {
         System.setProperty("aws.configFile", "/dev/null");
     }
 
-    private static AwsCredentialsProvider resolveCredentials(TransportConfig config) {
+    static AwsCredentialsProvider resolveCredentials(TransportConfig config) {
         if (config.hasAwsCredentials()) {
             logger.info("S3 using static credentials from config");
             return StaticCredentialsProvider.create(
                 AwsBasicCredentials.create(config.getAwsAccessKey(), config.getAwsSecretKey()));
         }
-        logger.info("S3 using default credential chain (supports Pod Identity, IRSA, instance profile, env vars)");
+
+        // Check for IRSA/Pod Identity — env vars are copied to system properties
+        // by ReplicationPlugin during init (before SecurityManager blocks getenv)
+        String roleArn = System.getProperty("aws.roleArn");
+        String tokenFile = System.getProperty("aws.webIdentityTokenFile");
+        if (roleArn != null && !roleArn.isEmpty() && tokenFile != null && !tokenFile.isEmpty()) {
+            logger.info("Using IRSA credentials: role={}, tokenFile={}", roleArn, tokenFile);
+            Path tokenPath = Paths.get(tokenFile);
+            StsClient stsClient = StsClient.builder()
+                .region(Region.of(config.getS3Region()))
+                .build();
+            return StsAssumeRoleWithWebIdentityCredentialsProvider.builder()
+                .stsClient(stsClient)
+                .refreshRequest(() -> {
+                    // Re-read token file on each refresh (IRSA rotates tokens)
+                    try {
+                        String token = new String(Files.readAllBytes(tokenPath), StandardCharsets.UTF_8).trim();
+                        return AssumeRoleWithWebIdentityRequest.builder()
+                            .roleArn(roleArn)
+                            .roleSessionName("elastic-mirror")
+                            .webIdentityToken(token)
+                            .build();
+                    } catch (IOException e) {
+                        throw new RuntimeException("Failed to read IRSA token file: " + tokenFile, e);
+                    }
+                })
+                .build();
+        }
+
+        logger.info("S3 using default credential chain (instance profile, env vars)");
         return DefaultCredentialsProvider.create();
     }
 

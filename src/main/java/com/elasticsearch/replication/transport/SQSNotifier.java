@@ -9,6 +9,10 @@ import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sqs.SqsClientBuilder;
+import software.amazon.awssdk.services.sts.StsClient;
+import software.amazon.awssdk.services.sts.auth.StsAssumeRoleWithWebIdentityCredentialsProvider;
+
+import java.nio.file.Paths;
 import software.amazon.awssdk.services.sqs.model.DeleteMessageRequest;
 import software.amazon.awssdk.services.sqs.model.Message;
 import software.amazon.awssdk.services.sqs.model.ReceiveMessageRequest;
@@ -56,9 +60,8 @@ public class SQSNotifier {
                     AwsBasicCredentials.create(config.getAwsAccessKey(), config.getAwsSecretKey()));
                 logger.info("SQS using static credentials from config");
             } else {
-                // Default chain: Pod Identity, IRSA, ECS task role, instance profile, env vars
-                credentialsProvider = DefaultCredentialsProvider.create();
-                logger.info("SQS using default credential chain (supports Pod Identity, IRSA, instance profile, env vars)");
+                // Use shared IRSA resolver (same as S3Transport)
+                credentialsProvider = S3Transport.resolveCredentials(config);
             }
 
             SqsClientBuilder builder = SqsClient.builder()
