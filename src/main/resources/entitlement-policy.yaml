@@ -8,6 +8,7 @@ ALL-UNNAMED:
         - aws.sessionToken
         - aws.region
   - outbound_network
+  - manage_threads
   - files:
       - path: /dev/null
         mode: read

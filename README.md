@@ -1,8 +1,8 @@
 # Elastic Mirror
 
-### Cross-Cluster Replication for Elasticsearch 7.17.x
+### Cross-Cluster Replication for Elasticsearch 8.13+
 
-An open-source plugin that provides active/passive cross-cluster replication for Elasticsearch 7.17.x without requiring a Platinum license. Uses S3 and SQS as the transport layer.
+An open-source plugin that provides active/passive cross-cluster replication for Elasticsearch 8.13+ without requiring a Platinum license. Uses S3 and SQS as the transport layer.
 
 ---
 
@@ -30,13 +30,11 @@ ES Cluster A (Active)  -->  S3 + SQS  -->  ES Cluster B (Passive)
 
 ## Compatibility
 
-Tested against the full Elasticsearch 7.17.x release line (7.17.0 through 7.17.28). The plugin compiles and runs correctly on every 7.17.x patch version. Runtime load tests with multi-index mixed workloads (creates, updates, deletes) have confirmed perfect cluster sync on 7.17.0, 7.17.25, and 7.17.28.
-
-Elasticsearch 8.x is not supported. The 7.x to 8.x upgrade introduced breaking changes to the plugin API that require a significant rewrite.
+Tested against Elasticsearch 8.13 and later. The plugin compiles and runs correctly on 8.13+.
 
 ## Requirements
 
-- Elasticsearch 7.17.x (any patch version)
+- Elasticsearch 8.13+
 - Java 11
 - AWS S3 bucket (or MinIO)
 - AWS SQS queue (or ElasticMQ)
